@@ -15,10 +15,16 @@ El artifact usaba el "runtime" de claude.ai, que FUERA de claude.ai no existe. H
 | Lo que usaba | Para qué | Dónde (aprox.) | Sustituto propuesto |
 |---|---|---|---|
 | `user.id()` | Identificar al jugador | línea ~1666 | Login real (Supabase Auth o Firebase Auth) |
-| `db.collection("data/users/...")` | Guardar colección de cada jugador | línea ~1668 | Base de datos (Supabase/Firebase) |
+| `db.collection("data/users/...")` | Guardar colección de cada jugador | — | ✅ HECHO: ahora pasa por el objeto `Almacen` (ver abajo). Hoy guarda en el navegador |
 | `db.collection("matriculas")` | Registro de matrículas ya fotografiadas | línea ~1840 | Misma base de datos |
 | `db.collection("intercambios")` | Cambios de cartas repetidas entre jugadores | línea ~3554 | Misma base de datos |
 | `sample.json(...)` | IA: reverso de carta, tasación por foto, motor de juego, tapar matrícula | líneas ~1627, 1685, 1854, 3664 | API de Claude llamada desde un servidor (nunca poner la API key en el navegador) |
+
+## Guardado de la colección (`Almacen`)
+Todo el guardado de cartas y progreso pasa por `const Almacen=...` en `index.html` (buscar "Almacen"). Tiene 4 funciones: `cargar()`, `guardarCarta(c)`, `borrarCarta(id)`, `guardarMeta(m)`.
+- Hoy: `AlmacenNavegador` → IndexedDB (cabe mucho, también fotos); si falla, localStorage. La primera vez copia lo que hubiera en localStorage (`cdc-cards`, `cdc-meta`) y no lo borra.
+- Para Supabase: escribir `AlmacenSupabase` con esas mismas 4 funciones y cambiar solo la línea `const Almacen=`. Una tabla `cartas` (id, user_id, datos jsonb) y otra `meta` (user_id, datos jsonb) bastan.
+- `db` y `uid` siguen en `null`: matrículas e intercambios online quedan apagados hasta tener login.
 
 Mientras no se sustituyan, esas partes no funcionarán al abrir la app en local.
 

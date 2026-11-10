@@ -1656,24 +1656,79 @@ const dayLabel=t=>new Date(t).toLocaleDateString("es-ES",{day:"numeric",month:"s
 const todayKey=()=>dayKey(Date.now());
 
 /* ---------- almacenamiento ---------- */
-let mine=[], meta={claimed:{},packs:[]}, db=null, uid=null, col=null;const openedPacks=new Set();
-function localLoad(){try{mine=JSON.parse(localStorage.getItem("cdc-cards")||"[]");meta=JSON.parse(localStorage.getItem("cdc-meta")||'{"claimed":{}}');meta.packs=meta.packs||[];meta.cs=meta.cs||{};meta.piloto=meta.piloto||{km:0};meta.taller=meta.taller||{};meta.car=meta.car||{d:"",n:0}}catch(e){}}
-function localSave(){try{localStorage.setItem("cdc-cards",JSON.stringify(mine));localStorage.setItem("cdc-meta",JSON.stringify(meta))}catch(e){}}
+/* Todo el guardado de la colección pasa por "Almacen", que solo sabe hacer 4 cosas:
+     cargar()            -> {cartas:[...], meta:{...} o null}
+     guardarCarta(carta) / borrarCarta(id) / guardarMeta(meta)
+   Hoy guarda en el navegador. Para pasar a Supabase basta con escribir otro objeto
+   con esas mismas 4 funciones (AlmacenSupabase) y cambiar la línea "const Almacen=...". */
+const copiaPlana=o=>JSON.parse(JSON.stringify(o));
+
+/* Navegador, opción buena: IndexedDB (cabe muchísimo, también las fotos de los coches cazados) */
+const AlmacenIndexedDB=(()=>{
+  let abierta=null;
+  function abrir(){if(abierta)return abierta;
+    abierta=new Promise((ok,ko)=>{if(!window.indexedDB)return ko(new Error("Este navegador no tiene IndexedDB"));
+      const r=indexedDB.open("kurcar",1);
+      r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains("cartas"))d.createObjectStore("cartas",{keyPath:"id"});if(!d.objectStoreNames.contains("ajustes"))d.createObjectStore("ajustes")};
+      r.onsuccess=()=>ok(r.result);r.onerror=()=>ko(r.error)});
+    return abierta}
+  function operar(cajon,modo,fn){return abrir().then(d=>new Promise((ok,ko)=>{const t=d.transaction(cajon,modo);const pet=fn(t.objectStore(cajon));
+    t.oncomplete=()=>ok(pet?pet.result:undefined);t.onerror=()=>ko(t.error);t.onabort=()=>ko(t.error)}))}
+  /* La primera vez, trae lo que hubiera guardado la versión antigua (localStorage). No lo borra: queda de reserva. */
+  async function traerLoAntiguo(){
+    if(await operar("ajustes","readonly",s=>s.get("migrado")))return;
+    let cartas=[],meta=null;try{cartas=JSON.parse(localStorage.getItem("cdc-cards")||"[]");meta=JSON.parse(localStorage.getItem("cdc-meta")||"null")}catch(_){}
+    await operar("cartas","readwrite",s=>{cartas.forEach(c=>c&&c.id&&s.put(c))});
+    await operar("ajustes","readwrite",s=>{if(meta)s.put(meta,"meta");s.put(true,"migrado")})}
+  return {
+    nombre:"IndexedDB",
+    async cargar(){await traerLoAntiguo();
+      const cartas=await operar("cartas","readonly",s=>s.getAll());const meta=await operar("ajustes","readonly",s=>s.get("meta"));
+      return {cartas:cartas||[],meta:meta||null}},
+    guardarCarta:c=>operar("cartas","readwrite",s=>s.put(copiaPlana(c))),
+    borrarCarta:id=>operar("cartas","readwrite",s=>s.delete(id)),
+    guardarMeta:m=>operar("ajustes","readwrite",s=>s.put(copiaPlana(m),"meta"))
+  }})();
+
+/* Navegador, opción de reserva: localStorage (cabe poco, ~5 MB). Solo se usa si IndexedDB falla. */
+const AlmacenLocalStorage=(()=>{
+  const leer=()=>{try{return JSON.parse(localStorage.getItem("cdc-cards")||"[]")}catch(_){return []}};
+  const escribir=cs=>localStorage.setItem("cdc-cards",JSON.stringify(cs));
+  return {
+    nombre:"localStorage",
+    async cargar(){let meta=null;try{meta=JSON.parse(localStorage.getItem("cdc-meta")||"null")}catch(_){}return {cartas:leer(),meta}},
+    async guardarCarta(c){const cs=leer().filter(x=>x.id!==c.id);cs.push(copiaPlana(c));escribir(cs)},
+    async borrarCarta(id){escribir(leer().filter(x=>x.id!==id))},
+    async guardarMeta(m){localStorage.setItem("cdc-meta",JSON.stringify(m))}
+  }})();
+
+/* El almacén que usa la app. Intenta IndexedDB y, si no puede, localStorage. */
+const AlmacenNavegador=(()=>{
+  let elegido=AlmacenIndexedDB;
+  const usar=fn=>(...a)=>fn(elegido,...a);
+  return {
+    get nombre(){return elegido.nombre},
+    async cargar(){try{return await AlmacenIndexedDB.cargar()}catch(e){console.warn("Kurcar: IndexedDB no disponible, uso localStorage",e);elegido=AlmacenLocalStorage;return AlmacenLocalStorage.cargar()}},
+    guardarCarta:usar((a,c)=>a.guardarCarta(c)),
+    borrarCarta:usar((a,id)=>a.borrarCarta(id)),
+    guardarMeta:usar((a,m)=>a.guardarMeta(m))
+  }})();
+
+const Almacen=AlmacenNavegador; /* <- en el futuro: const Almacen=AlmacenSupabase; */
+
+/* ---------- estado de la partida en memoria ---------- */
+let mine=[], meta={claimed:{},packs:[]}, db=null, uid=null;const openedPacks=new Set();
+/* db y uid: los usaban las matrículas e intercambios online de claude.ai; quedan vacíos hasta tener Supabase */
+function metaCompleta(m){m=m||{};return {claimed:m.claimed||{},packs:(m.packs||[]).filter(p=>p&&!openedPacks.has(p.id)),cs:m.cs||{},piloto:m.piloto||{km:0},taller:m.taller||{},car:m.car||{d:"",n:0},kit:m.kit||0,kit2:m.kit2||0,horas:m.horas||0}}
+let avisadoFallo=false;
+function falloGuardar(e){console.error("Kurcar: no se pudo guardar",e);if(!avisadoFallo){avisadoFallo=true;try{setStatus("Ojo: no he podido guardar tu colección en este navegador.","bad")}catch(_){}}}
+async function guardarCarta(c){try{await Almacen.guardarCarta(c)}catch(e){falloGuardar(e)}}
+async function borrarCarta(id){try{await Almacen.borrarCarta(id)}catch(e){falloGuardar(e)}}
 async function initStore(){
-  localLoad(); render();
-  try{
-    const user=await window.claude?.use?.("user"); db=await window.claude?.use?.("db");
-    uid=user?await user.id():null;
-    if(db&&uid){
-      col=db.collection("data/users/"+uid);try{mkStart()}catch(_){}
-      col.onSnapshot(snap=>{
-        const docs=snap.docs.map(d=>{let x;try{x=JSON.parse(JSON.stringify(d.data()))}catch(_){x={...d.data()}}return {...x,id:d.id}});/* copia: lo que llega de la base de datos viene congelado */
-        const m=docs.find(d=>d.id==="_meta"); if(m)meta={claimed:{...(m.claimed||{}),...meta.claimed},packs:(m.packs||[]).filter(p=>p&&!openedPacks.has(p.id)),cs:m.cs||meta.cs||{},piloto:m.piloto||meta.piloto||{km:0},taller:m.taller||meta.taller||{},car:m.car||meta.car||{d:"",n:0},kit:m.kit||meta.kit||0,kit2:m.kit2||meta.kit2||0,horas:m.horas!=null?m.horas:(meta.horas||0)};
-        mine=docs.filter(d=>d.id!=="_meta").sort((a,b)=>(a.t||0)-(b.t||0)); render();
-        grantDaily();repriceCaught().then(()=>fixOldPlates()).catch(()=>{});
-      },()=>{});
-    }
-  }catch(e){}
+  try{const r=await Almacen.cargar();mine=(r.cartas||[]).sort((a,b)=>(a.t||0)-(b.t||0));meta=metaCompleta(r.meta)}
+  catch(e){console.error("Kurcar: no se pudo cargar la colección",e);meta=metaCompleta(null)}
+  render();
+  grantDaily();repriceCaught().then(()=>fixOldPlates()).catch(()=>{});
 }
 
 /* Retasación de los coches cazados: Claude mira la foto de la carta y pone el precio de ese vehículo concreto */
@@ -1686,12 +1741,12 @@ async function repriceCaught(){if(repricing||repriceOff)return;const todo=mine.f
 Di cuánto vale HOY en España este vehículo concreto tal como se ve: mercado de segunda mano real para esa versión y año. Si es una ambulancia, taxi, policía, camper, grúa, furgón rotulado o lleva otra transformación o equipamiento especial, inclúyelo en el valor. Si es un clásico o un mito, su valor de colección en buen estado.
 ${"Referencias de mercado para calibrar: VW Crafter 2.0 TDI furgón de 2019 ≈ 24.000 €; ambulancia sobre Crafter o Sprinter de 2019 ≈ 45.000 €; Ford Transit de 2020 ≈ 20.000 €; Seat León 1.5 TSI de 2021 ≈ 18.000 €; Toyota Corolla Hybrid de 2020 ≈ 18.000 €; BMW 320d de 2019 ≈ 24.000 €; Dacia Sandero de 2021 ≈ 10.000 €. Las furgonetas y comerciales grandes, los 4x4 y los vehículos transformados pierden poco valor."}
 Responde SOLO JSON: {"precio":number}. Un único número redondo, nunca una horquilla: de 500 en 500 por debajo de 20.000 €, de 1.000 en 1.000 hasta 100.000 €, y más redondo por encima.`,{images:b?[b]:[],modelTier:"default",cache:false});
-      if(+r?.precio>0){c.precio=roundPrice(r.precio);c.pv=2;if(col){try{await col.doc(c.id).set(c)}catch(_){localSave()}}else localSave();render()}
+      if(+r?.precio>0){c.precio=roundPrice(r.precio);c.pv=2;await guardarCarta(c);render()}
     }catch(e){if(e?.code==="rate_limited"||e?.code==="not_granted"){repriceOff=e.code==="not_granted";break}}}
   repricing=false}
 async function saveCard(c){
   mine.push(c); render();
-  if(col){try{await col.doc(c.id).set(c)}catch(e){localSave()}} else localSave();
+  await guardarCarta(c);
 }
 /* dos sobres de regalo cada día, para ir probando */
 const DAILY_PACKS=2;let dailyBusy=false;
@@ -1702,7 +1757,7 @@ async function grantDaily(){
   render();try{await saveMeta()}catch(_){}dailyBusy=false;
 }
 async function saveMeta(){
-  if(col){try{await col.doc("_meta").set({claimed:meta.claimed,packs:meta.packs||[],cs:meta.cs||{},piloto:meta.piloto||{km:0},taller:meta.taller||{},car:meta.car||{d:"",n:0},kit:meta.kit||0,kit2:meta.kit2||0,horas:meta.horas||0})}catch(e){localSave()}} else localSave();
+  try{await Almacen.guardarMeta(metaCompleta(meta))}catch(e){falloGuardar(e)}
 }
 
 /* ---------- garaje ---------- */
@@ -1882,7 +1937,7 @@ Reglas:
     if(own){
       if(!(await hidePlate(workCv,r.placa))){setStatus("Este coche ya es tuyo, y en esta foto no localizo bien la matrícula para cambiarla.","bad");return}
       own.foto=toJpeg(cropCar(workCv,r.coche));own.pf=2;render();
-      if(col){try{await col.doc(own.id).set(own)}catch(_){localSave()}}else localSave();
+      await guardarCarta(own);
       setStatus(`Este coche ya era tuyo: he cambiado la foto de la carta ${own.code}.`,"ok");$("#fresh").innerHTML=cardHTML(own,{deal:true});return;
     }
     const reg=await registry(); let regDoc=null, regData=null;
@@ -1921,7 +1976,7 @@ function versionBox(c,onChange){if(!c||!c.alt)return "";const cur={modelo:c.mode
   return `<div class="vbox"><p class="vb-t"><span class="vb-c c-${esc(c.conf||"media")}">${c.conf==="alta"?"Versión confirmada":c.conf==="baja"?"Versión probable":"Versión deducida"}</span>${c.pistas?` ${esc(c.pistas)}`:""}</p>${c.alt.length?`<div class="vb-l"><span>¿Es otra?</span>${c.alt.map((a,i)=>`<button class="vb-b" data-alt="${i}">${esc(a.modelo)} · ${a.cv} CV</button>`).join("")}</div>`:""}</div>`}
 async function switchVersion(c,i){const a=c.alt[i];if(!a)return;const prev={modelo:c.modelo};SPECK.forEach(k=>prev[k]=c[k]);
   c.modelo=a.modelo;SPECK.forEach(k=>{if(a[k])c[k]=a[k]});c.alt=[prev,...c.alt.filter((_,j)=>j!==i)];c.conf="alta";c.pistas="Versión elegida por ti";
-  const own=mine.find(x=>x.id===c.id);if(own&&own!==c)Object.assign(own,c);render();if(col){try{await col.doc(c.id).set(own||c)}catch(_){localSave()}}else localSave()}
+  const own=mine.find(x=>x.id===c.id);if(own&&own!==c)Object.assign(own,c);render();await guardarCarta(own||c)}
 function showReveal(c,kicker){
   const ov=$("#rv");ov.className="reveal r-"+(c.rareza||"comun");$("#rv-k").textContent=kicker;$("#rv-r").textContent=(mitoOf(c)?MITO_TXT[mitoOf(c)]+" · ":"")+(RAR[c.rareza]||"Común")+" · media "+media(c);
   $("#rv-card").innerHTML=`<div class="rv-fit">${cardHTML(c)}</div>`;$("#rv-alt").innerHTML=versionBox(c);
@@ -2458,7 +2513,7 @@ function showCard(i){
   const gb=box.querySelector("[data-genback]");
   if(gb)gb.onclick=async e=>{e.stopPropagation();gb.disabled=true;const st=box.querySelector(".genst");st.textContent="Escribiendo…";
     try{const r=await genBack(c);Object.assign(c,r);const own=mine.find(x=>x.id===c.id);
-      if(own){Object.assign(own,r);if(col){try{await col.doc(own.id).set(own)}catch(_){localSave()}}else localSave()}else REV[(c.marca+" "+c.modelo).trim()]=[r.reverso,r.curiosidades];
+      if(own){Object.assign(own,r);await guardarCarta(own)}else REV[(c.marca+" "+c.modelo).trim()]=[r.reverso,r.curiosidades];
       box.querySelector(".face.back").innerHTML=backHTML(c)}
     catch(err){gb.disabled=false;st.textContent=err?.code==="no_sample"?"Aquí no puedo escribirla. Ábrela en Claude con tu cuenta.":err?.code==="rate_limited"?"Espera un minuto y vuelve a probar.":"No ha salido. Prueba otra vez."}};
   box.onpointermove=e=>{if(e.pointerType!=="mouse"||matchMedia("(prefers-reduced-motion: reduce)").matches)return;const r=box.getBoundingClientRect(),x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
@@ -2667,8 +2722,8 @@ $("#stake-txt").textContent=STAKE_TXT.normal;
 async function gainCards(list){let n=mine.filter(c=>c.premio).length;const t=Date.now();
   for(const [i,b] of list.entries()){const {id,code,_src,...rest}=b;const c={...rest,id:"p"+(t+i).toString(36)+"w"+i,t:t+i,premio:true,code:"P"+(++n)};delete c.h;await saveCard(c)}}
 async function loseCards(list){const ids=new Set(list.map(c=>c.id));
-  for(const id of ids){if(col){try{await col.doc(id).delete()}catch(_){}}}
-  mine=mine.filter(c=>!ids.has(c.id));localSave();render()}
+  for(const id of ids)await borrarCarta(id);
+  mine=mine.filter(c=>!ids.has(c.id));render()}
 function stakePanel(title,cards,note){$("#stakebox").hidden=false;$("#stakebox").innerHTML=`<p class="label">${title}</p><div class="minis">${cards.map((c,i)=>miniHTML(c,"",`data-i="${i}"`)).join("")}</div>${note?`<p class="tag" style="text-align:left;margin:6px 0 0">${note}</p>`:""}`;addLens($("#stakebox"),cards)}
 function settleStakes(wn){
   const lost=[...M.played[other(wn)].values()];$("#next-row").hidden=true;
@@ -3665,7 +3720,7 @@ async function fixOldPlates(){if(plateFixing||plateFixOff)return;const todo=mine
 Responde SOLO JSON: {"placa":{"x":number,"y":number,"w":number,"h":number}|null} en fracciones de la imagen (0 a 1, origen arriba a la izquierda; x,y = esquina superior izquierda). Ajusta la caja al borde exterior de la placa o parche. null si no hay ninguno.`,{images:b?[b]:[],modelTier:"default",cache:false});
       if(r&&r.placa&&r.placa.w>0){const im=await imgFromUrl(c.foto);const cv=document.createElement("canvas");cv.width=im.width;cv.height=im.height;cv.getContext("2d").drawImage(im,0,0);
         const P=r.placa,bx={x:P.x*cv.width,y:P.y*cv.height,w:P.w*cv.width,h:P.h*cv.height};if(inpaintPlate(cv,bx))c.foto=toJpeg(cv)}
-      c.pf=2;if(col){try{await col.doc(c.id).set(c)}catch(_){localSave()}}else localSave();render()}
+      c.pf=2;await guardarCarta(c);render()}
     catch(e){if(e?.code==="rate_limited"||e?.code==="not_granted"){plateFixOff=e.code==="not_granted";break}}}
   plateFixing=false}
 
