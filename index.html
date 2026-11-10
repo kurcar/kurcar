@@ -1305,11 +1305,54 @@ body.mom-open{overflow:hidden}
 /* la etiqueta de rareza no debe verse al dar la vuelta a la carta */
 .face *{-webkit-backface-visibility:hidden;backface-visibility:hidden}
 .face .rar,.face .mito{transform:translateZ(1px)}
+
+/* ===== cuenta (login con Supabase) ===== */
+.hr-r{display:flex;align-items:center;gap:8px;min-width:0}
+.cta-btn{display:inline-flex;align-items:center;gap:5px;font:inherit;font-family:var(--f-num);font-weight:700;font-size:.9rem;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border:1px solid var(--line);border-radius:20px;background:var(--tile);color:var(--fg);cursor:pointer;white-space:nowrap}
+.cta-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.cta-btn.dentro{background:var(--go);border-color:var(--go);color:#fff}
+.cta-btn.aviso{border-color:var(--stop);color:var(--stop)}
+@media (max-width:420px){.cta-btn.dentro #cuenta-txt{display:none}.cta-btn.dentro{padding:5px 7px}}
+#cuenta-dlg{border:1px solid var(--line);border-radius:12px;padding:0;width:min(420px,calc(100vw - 32px));background:var(--table-2);color:var(--fg);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+#cuenta-dlg::backdrop{background:rgba(10,12,15,.55)}
+#cuenta-form{padding:18px 18px 16px;display:grid;gap:12px}
+#cuenta-fuera,#cuenta-dentro{display:grid;gap:12px}
+#cuenta-fuera[hidden],#cuenta-dentro[hidden]{display:none}
+.cd-head{display:flex;align-items:center;justify-content:space-between}
+.cd-head h2{margin:0;font-family:var(--f-display);font-style:italic;font-size:1.2rem}
+.cd-x{font:inherit;font-size:1.6rem;line-height:1;background:none;border:0;color:var(--muted);cursor:pointer;padding:0 4px}
+.cd-txt{margin:0;color:var(--fg)}
+.cd-nota{margin:0;color:var(--muted);font-size:.8rem}
+.cd-l{display:grid;gap:4px;font-weight:700;font-size:.85rem}
+.cd-l input{font:inherit;font-weight:400;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:var(--tile);color:var(--fg);width:100%}
+.cd-msg{margin:0;padding:8px 10px;border-radius:6px;background:color-mix(in srgb,var(--stop) 12%,transparent);color:var(--stop);font-size:.88rem}
+.cd-msg.ok{background:color-mix(in srgb,var(--go) 14%,transparent);color:var(--go)}
+.cd-row{display:flex;gap:8px;flex-wrap:wrap}
+.cd-row .btn{flex:1;min-width:0}
+.cd-row .btn[disabled]{opacity:.55;cursor:progress}
 </style>
 
 <header><div class="wrap" style="padding-bottom:0">
-  <div class="hrow"><h1>Kur<span>car</span></h1><div class="count" id="count"></div></div>
+  <div class="hrow"><h1>Kur<span>car</span></h1><div class="hr-r"><div class="count" id="count"></div><button type="button" class="cta-btn" id="cuenta-btn" aria-label="Entrar en tu cuenta"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span id="cuenta-txt">Entrar</span></button></div></div>
 </div></header>
+<dialog id="cuenta-dlg" aria-labelledby="cuenta-tit">
+  <form id="cuenta-form" method="dialog" novalidate>
+    <div class="cd-head"><h2 id="cuenta-tit">Tu cuenta</h2><button type="button" class="cd-x" id="cuenta-cerrar" aria-label="Cerrar">×</button></div>
+    <div id="cuenta-fuera">
+      <p class="cd-txt">Entra para guardar tu colección en la nube y verla en el móvil, el ordenador o donde quieras. Sin cuenta también puedes jugar: se guarda solo en este navegador.</p>
+      <label class="cd-l">Email<input type="email" id="cuenta-email" autocomplete="email" inputmode="email" required autofocus></label>
+      <label class="cd-l">Contraseña<input type="password" id="cuenta-pass" autocomplete="current-password" minlength="6" required></label>
+      <p class="cd-msg" id="cuenta-msg" role="alert" hidden></p>
+      <div class="cd-row"><button type="submit" class="btn" id="cuenta-entrar">Entrar</button><button type="button" class="btn ghost" id="cuenta-crear">Crear cuenta</button></div>
+      <p class="cd-nota">Si creas una cuenta, las cartas que tengas ahora en este navegador pasarán a ella. Contraseña de 6 caracteres como mínimo.</p>
+    </div>
+    <div id="cuenta-dentro" hidden>
+      <p class="cd-txt">Has entrado como <b id="cuenta-quien"></b>. Tu colección se guarda en la nube.</p>
+      <p class="cd-msg" id="cuenta-msg2" role="alert" hidden></p>
+      <div class="cd-row"><button type="button" class="btn ghost" id="cuenta-salir">Salir</button></div>
+    </div>
+  </form>
+</dialog>
 <nav role="tablist" class="tabbar">
   <button role="tab" id="t-garaje" aria-selected="true" data-tab="garaje"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 4l9 6.5V20H3z"/><path d="M7 20v-6h10v6"/><path d="M7 17h10"/></svg><span>Garaje</span></button>
   <button role="tab" id="t-retos" aria-selected="false" data-tab="retos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"/><path d="M12 13v4M8 20h8M10 17h4v3h-4z"/></svg><span>Retos</span><i class="badge" id="badge" hidden></i></button>
@@ -1495,6 +1538,8 @@ body.mom-open{overflow:hidden}
   </div>
 </div>
 
+<!-- Supabase (login y colección en la nube). Si no carga, la app sigue funcionando sin cuenta. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
 <script>
 const STATS=[
   {k:"cv",l:"CV",u:"",hi:true},{k:"cc",l:"Cm³",u:"",hi:true},
@@ -1687,7 +1732,9 @@ const AlmacenIndexedDB=(()=>{
       return {cartas:cartas||[],meta:meta||null}},
     guardarCarta:c=>operar("cartas","readwrite",s=>s.put(copiaPlana(c))),
     borrarCarta:id=>operar("cartas","readwrite",s=>s.delete(id)),
-    guardarMeta:m=>operar("ajustes","readwrite",s=>s.put(copiaPlana(m),"meta"))
+    guardarMeta:m=>operar("ajustes","readwrite",s=>s.put(copiaPlana(m),"meta")),
+    /* quita del navegador lo que ya se ha subido a la nube (esas cartas y el progreso). Conserva la marca "migrado" */
+    async vaciar(ids){await operar("cartas","readwrite",s=>{ids.forEach(id=>s.delete(id))});await operar("ajustes","readwrite",s=>s.delete("meta"))}
   }})();
 
 /* Navegador, opción de reserva: localStorage (cabe poco, ~5 MB). Solo se usa si IndexedDB falla. */
@@ -1699,7 +1746,8 @@ const AlmacenLocalStorage=(()=>{
     async cargar(){let meta=null;try{meta=JSON.parse(localStorage.getItem("cdc-meta")||"null")}catch(_){}return {cartas:leer(),meta}},
     async guardarCarta(c){const cs=leer().filter(x=>x.id!==c.id);cs.push(copiaPlana(c));escribir(cs)},
     async borrarCarta(id){escribir(leer().filter(x=>x.id!==id))},
-    async guardarMeta(m){localStorage.setItem("cdc-meta",JSON.stringify(m))}
+    async guardarMeta(m){localStorage.setItem("cdc-meta",JSON.stringify(m))},
+    async vaciar(ids){const q=new Set(ids);escribir(leer().filter(x=>!q.has(x.id)));localStorage.removeItem("cdc-meta")}
   }})();
 
 /* El almacén que usa la app. Intenta IndexedDB y, si no puede, localStorage. */
@@ -1711,10 +1759,38 @@ const AlmacenNavegador=(()=>{
     async cargar(){try{return await AlmacenIndexedDB.cargar()}catch(e){console.warn("Kurcar: IndexedDB no disponible, uso localStorage",e);elegido=AlmacenLocalStorage;return AlmacenLocalStorage.cargar()}},
     guardarCarta:usar((a,c)=>a.guardarCarta(c)),
     borrarCarta:usar((a,id)=>a.borrarCarta(id)),
-    guardarMeta:usar((a,m)=>a.guardarMeta(m))
+    guardarMeta:usar((a,m)=>a.guardarMeta(m)),
+    vaciar:usar((a,ids)=>a.vaciar(ids))
   }})();
 
-const Almacen=AlmacenNavegador; /* <- en el futuro: const Almacen=AlmacenSupabase; */
+/* ---------- nube: Supabase ----------
+   Estas dos claves son PÚBLICAS a propósito (van en la web). La seguridad la ponen las reglas
+   de la base de datos: cada jugador solo puede leer y escribir sus propias filas (ver supabase/esquema.sql).
+   NUNCA poner aquí la clave "secret"/"service_role" ni la contraseña de la base de datos. */
+const SUPABASE_URL="https://lmmrcdyxepmllcaefira.supabase.co";
+const SUPABASE_CLAVE="sb_publishable_wg5n9VgRHLxu0cRTeVO7PQ_mZJpygWR";
+const sb=(()=>{try{return window.supabase?.createClient?window.supabase.createClient(SUPABASE_URL,SUPABASE_CLAVE):null}catch(e){console.warn("Kurcar: sin Supabase",e);return null}})();
+let cuenta=null; /* {id, email} del jugador conectado, o null si juega sin cuenta */
+
+const AlmacenSupabase={
+  nombre:"Supabase",
+  async cargar(){
+    const cartas=[];
+    for(let desde=0;;desde+=1000){ /* de 1000 en 1000, que es lo máximo que da Supabase de una vez */
+      const {data,error}=await sb.from("cartas").select("id,datos").order("id").range(desde,desde+999);
+      if(error)throw error;
+      data.forEach(r=>cartas.push({...r.datos,id:r.id}));
+      if(data.length<1000)break}
+    const {data:pr,error}=await sb.from("progreso").select("datos").maybeSingle();
+    if(error)throw error;
+    return {cartas,meta:pr?pr.datos:null}},
+  async guardarCarta(c){const {error}=await sb.from("cartas").upsert({user_id:cuenta.id,id:c.id,datos:copiaPlana(c),actualizado:new Date().toISOString()});if(error)throw error},
+  async borrarCarta(id){const {error}=await sb.from("cartas").delete().eq("id",id);if(error)throw error},
+  async guardarMeta(m){const {error}=await sb.from("progreso").upsert({user_id:cuenta.id,datos:copiaPlana(m),actualizado:new Date().toISOString()});if(error)throw error}
+};
+
+/* El almacén en uso: el del navegador si juegas sin cuenta, el de Supabase si has entrado */
+let Almacen=AlmacenNavegador;
 
 /* ---------- interruptor del modo carreras ----------
    false = oculto (pestaña, horas de taller, piezas en sobres, estado de las cartas).
@@ -1724,16 +1800,50 @@ const MODO_CARRERAS=false;
 
 /* ---------- estado de la partida en memoria ---------- */
 let mine=[], meta={claimed:{},packs:[]}, db=null, uid=null;const openedPacks=new Set();
-/* db y uid: los usaban las matrículas e intercambios online de claude.ai; quedan vacíos hasta tener Supabase */
+/* db y uid: los usaban las matrículas e intercambios online de claude.ai; quedan vacíos hasta montarlos con Supabase */
 function metaCompleta(m){m=m||{};return {claimed:m.claimed||{},packs:(m.packs||[]).filter(p=>p&&!openedPacks.has(p.id)),cs:m.cs||{},piloto:m.piloto||{km:0},taller:m.taller||{},car:m.car||{d:"",n:0},kit:m.kit||0,kit2:m.kit2||0,horas:m.horas||0}}
 let avisadoFallo=false;
-function falloGuardar(e){console.error("Kurcar: no se pudo guardar",e);if(!avisadoFallo){avisadoFallo=true;try{setStatus("Ojo: no he podido guardar tu colección en este navegador.","bad")}catch(_){}}}
+function falloGuardar(e){console.error("Kurcar: no se pudo guardar",e);if(!avisadoFallo){avisadoFallo=true;try{setStatus(Almacen===AlmacenSupabase?"Ojo: no he podido guardar en la nube. Revisa tu conexión.":"Ojo: no he podido guardar tu colección en este navegador.","bad")}catch(_){}}}
 async function guardarCarta(c){try{await Almacen.guardarCarta(c)}catch(e){falloGuardar(e)}}
 async function borrarCarta(id){try{await Almacen.borrarCarta(id)}catch(e){falloGuardar(e)}}
+/* Junta lo que había en el navegador (jugando sin cuenta) con lo de la nube */
+function juntarMeta(nube,local){
+  if(!nube)return local;if(!local)return nube;
+  const diaDe=p=>p.id.slice(2,p.id.lastIndexOf("-")); /* los sobres diarios se llaman d-AAAA-MM-DD-n */
+  const ids=new Set((nube.packs||[]).map(p=>p.id));
+  const extra=(local.packs||[]).filter(p=>p&&!ids.has(p.id)&&!(p.daily&&nube.claimed&&nube.claimed["daily:"+diaDe(p)]));
+  return {...nube,claimed:{...(local.claimed||{}),...(nube.claimed||{})},packs:[...(nube.packs||[]),...extra]}}
+
+async function cargarDelNavegador(){
+  const r=await AlmacenNavegador.cargar();return {cartas:r.cartas||[],meta:r.meta||null}}
+
+/* Pasa a la nube: carga tu colección de Supabase y le suma lo que hubiera en este navegador.
+   Lo del navegador solo se borra cuando ya está todo subido. */
+async function cargarDeLaNube(){
+  const nube=await AlmacenSupabase.cargar();
+  const local=await cargarDelNavegador();
+  if(local.cartas.length||local.meta){
+    const tengo=new Set(nube.cartas.map(c=>c.id));
+    const nuevas=local.cartas.filter(c=>c&&c.id&&!tengo.has(c.id));
+    for(const c of nuevas)await AlmacenSupabase.guardarCarta(c);
+    const m=juntarMeta(nube.meta,local.meta);
+    if(m)await AlmacenSupabase.guardarMeta(metaCompleta(m));
+    await AlmacenNavegador.vaciar(local.cartas.map(c=>c&&c.id).filter(Boolean));
+    if(nuevas.length)setTimeout(()=>{try{setStatus(`He subido a tu cuenta ${nuevas.length} ${nuevas.length===1?"carta que tenías":"cartas que tenías"} en este navegador.`,"ok")}catch(_){}},500);
+    return {cartas:[...nube.cartas,...nuevas],meta:m}}
+  return nube}
+
 async function initStore(){
-  try{const r=await Almacen.cargar();mine=(r.cartas||[]).sort((a,b)=>(a.t||0)-(b.t||0));meta=metaCompleta(r.meta)}
-  catch(e){console.error("Kurcar: no se pudo cargar la colección",e);meta=metaCompleta(null)}
-  render();
+  let r=null;
+  if(sb){try{const {data}=await sb.auth.getSession();const u=data?.session?.user;if(u)cuenta={id:u.id,email:u.email}}catch(e){console.warn("Kurcar: no pude leer la sesión",e)}}
+  if(cuenta){
+    try{r=await cargarDeLaNube();Almacen=AlmacenSupabase}
+    catch(e){console.error("Kurcar: no pude cargar de la nube",e);nubeCaida=true}}
+  if(!r){
+    try{r=await cargarDelNavegador()}catch(e){console.error("Kurcar: no se pudo cargar la colección",e);r={cartas:[],meta:null}}
+    Almacen=AlmacenNavegador}
+  mine=(r.cartas||[]).sort((a,b)=>(a.t||0)-(b.t||0));meta=metaCompleta(r.meta);
+  pintarCuenta();render();
   grantDaily();repriceCaught().then(()=>fixOldPlates()).catch(()=>{});
 }
 
@@ -3772,6 +3882,47 @@ async function confirmPick(){const c=PICK.cards[PICK.sel],pack=PICK.pack;if(!c||
   openedPacks.add(pack.id);meta.packs=(meta.packs||[]).filter(p=>p.id!==pack.id);saveMeta().catch(()=>{});
   let n=mine.filter(x=>x.premio).length;const card={...c,id:"p"+Date.now().toString(36)+"e",t:Date.now(),premio:true,code:"P"+(n+1)};
   $("#pp").hidden=true;document.body.style.overflow="";try{showReveal(card,"¡Elegida!")}catch(_){}saveCard(card).then(()=>render(),()=>render())}
+
+
+/* ---------- ventana de cuenta (entrar / crear cuenta / salir) ---------- */
+let nubeCaida=false;
+function pintarCuenta(){const b=$("#cuenta-btn"),t=$("#cuenta-txt");if(!b)return;
+  b.hidden=!sb;b.classList.toggle("dentro",!!cuenta&&!nubeCaida);b.classList.toggle("aviso",!!cuenta&&nubeCaida);
+  t.textContent=cuenta?(nubeCaida?"Sin conexión":cuenta.email.split("@")[0]):"Entrar";
+  b.setAttribute("aria-label",cuenta?`Tu cuenta: ${cuenta.email}`:"Entrar en tu cuenta");
+  $("#cuenta-fuera").hidden=!!cuenta;$("#cuenta-dentro").hidden=!cuenta;if(cuenta)$("#cuenta-quien").textContent=cuenta.email;
+  const m2=$("#cuenta-msg2");m2.hidden=!nubeCaida;if(nubeCaida)m2.textContent="Ahora mismo no puedo conectar con la nube. Juegas guardando en este navegador; al volver a abrir Kurcar con conexión, se subirá a tu cuenta."}
+function avisoCuenta(txt,ok){const m=$("#cuenta-msg");m.hidden=!txt;m.textContent=txt||"";m.classList.toggle("ok",!!ok)}
+function errorEnEspanol(e){const t=(e&&(e.message||e.msg||e.error_description))||String(e||"");
+  if(/invalid login credentials/i.test(t))return "Email o contraseña incorrectos.";
+  if(/already registered|already exists/i.test(t))return "Ya hay una cuenta con ese email. Pulsa «Entrar».";
+  if(/password.*(at least|characters|short)/i.test(t))return "La contraseña tiene que tener al menos 6 caracteres.";
+  if(/weak|pwned/i.test(t))return "Esa contraseña es demasiado fácil. Prueba otra más larga.";
+  if(/invalid.*email|email.*invalid|unable to validate email/i.test(t))return "Ese email no parece válido.";
+  if(/rate limit|too many/i.test(t))return "Demasiados intentos seguidos. Espera un minuto y vuelve a probar.";
+  if(/email not confirmed/i.test(t))return "Esa cuenta no está confirmada todavía.";
+  if(/fetch|network|failed to/i.test(t))return "No hay conexión con la nube. Revisa tu internet.";
+  return "No ha funcionado: "+t}
+async function accionCuenta(crear){
+  const email=$("#cuenta-email").value.trim(),pass=$("#cuenta-pass").value;
+  if(!email||!/^\S+@\S+\.\S+$/.test(email))return avisoCuenta("Escribe tu email.");
+  if(pass.length<6)return avisoCuenta("La contraseña tiene que tener al menos 6 caracteres.");
+  const bs=[$("#cuenta-entrar"),$("#cuenta-crear")];bs.forEach(b=>b.disabled=true);avisoCuenta(crear?"Creando tu cuenta…":"Entrando…",true);
+  try{
+    const {data,error}=crear?await sb.auth.signUp({email,password:pass}):await sb.auth.signInWithPassword({email,password:pass});
+    if(error)throw error;
+    if(!data.session)throw new Error("email not confirmed");
+    avisoCuenta("¡Listo! Cargando tu colección…",true);
+    location.reload(); /* al recargar, initStore ve la sesión y trae la colección de la nube */
+  }catch(e){console.warn("Kurcar: cuenta",e);avisoCuenta(errorEnEspanol(e));bs.forEach(b=>b.disabled=false)}}
+(function montarCuenta(){const dlg=$("#cuenta-dlg");if(!dlg)return;
+  $("#cuenta-btn").onclick=()=>{avisoCuenta("");pintarCuenta();dlg.showModal?dlg.showModal():dlg.setAttribute("open","")};
+  $("#cuenta-cerrar").onclick=()=>dlg.close();
+  dlg.addEventListener("click",e=>{if(e.target===dlg)dlg.close()}); /* tocar fuera cierra */
+  $("#cuenta-form").addEventListener("submit",e=>{e.preventDefault();if(!cuenta)accionCuenta(false)});
+  $("#cuenta-crear").onclick=()=>accionCuenta(true);
+  $("#cuenta-salir").onclick=async()=>{$("#cuenta-salir").disabled=true;try{await sb.auth.signOut()}catch(_){}location.reload()};
+  pintarCuenta()})();
 
 render();initStore();
 </script>

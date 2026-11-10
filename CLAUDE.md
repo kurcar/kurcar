@@ -20,17 +20,24 @@ El artifact usaba el "runtime" de claude.ai, que FUERA de claude.ai no existe. H
 
 | Lo que usaba | Para qué | Dónde (aprox.) | Sustituto propuesto |
 |---|---|---|---|
-| `user.id()` | Identificar al jugador | línea ~1666 | Login real (Supabase Auth o Firebase Auth) |
-| `db.collection("data/users/...")` | Guardar colección de cada jugador | — | ✅ HECHO: ahora pasa por el objeto `Almacen` (ver abajo). Hoy guarda en el navegador |
-| `db.collection("matriculas")` | Registro de matrículas ya fotografiadas | línea ~1840 | Misma base de datos |
-| `db.collection("intercambios")` | Cambios de cartas repetidas entre jugadores | línea ~3554 | Misma base de datos |
+| `user.id()` | Identificar al jugador | — | ✅ HECHO: login con email y contraseña de Supabase (botón "Entrar" en la cabecera) |
+| `db.collection("data/users/...")` | Guardar colección de cada jugador | — | ✅ HECHO: `Almacen` = navegador sin cuenta, Supabase con cuenta (ver abajo) |
+| `db.collection("matriculas")` | Registro de matrículas ya fotografiadas | buscar `registry()` | Supabase (pendiente) |
+| `db.collection("intercambios")` | Cambios de cartas repetidas entre jugadores | buscar `mkStart` | Supabase (pendiente, siguiente gran paso) |
 | `sample.json(...)` | IA: reverso de carta, tasación por foto, motor de juego, tapar matrícula | líneas ~1627, 1685, 1854, 3664 | API de Claude llamada desde un servidor (nunca poner la API key en el navegador) |
 
-## Guardado de la colección (`Almacen`)
-Todo el guardado de cartas y progreso pasa por `const Almacen=...` en `index.html` (buscar "Almacen"). Tiene 4 funciones: `cargar()`, `guardarCarta(c)`, `borrarCarta(id)`, `guardarMeta(m)`.
-- Hoy: `AlmacenNavegador` → IndexedDB (cabe mucho, también fotos); si falla, localStorage. La primera vez copia lo que hubiera en localStorage (`cdc-cards`, `cdc-meta`) y no lo borra.
-- Para Supabase: escribir `AlmacenSupabase` con esas mismas 4 funciones y cambiar solo la línea `const Almacen=`. Una tabla `cartas` (id, user_id, datos jsonb) y otra `meta` (user_id, datos jsonb) bastan.
-- `db` y `uid` siguen en `null`: matrículas e intercambios online quedan apagados hasta tener login.
+## Guardado de la colección (`Almacen`) y Supabase
+Todo el guardado de cartas y progreso pasa por la variable `Almacen` en `index.html` (buscar "Almacen"). Cada almacén tiene 4 funciones: `cargar()`, `guardarCarta(c)`, `borrarCarta(id)`, `guardarMeta(m)`.
+- **Sin cuenta**: `AlmacenNavegador` → IndexedDB (si falla, localStorage). La primera vez copió lo que hubiera en localStorage (`cdc-cards`, `cdc-meta`).
+- **Con cuenta**: `AlmacenSupabase` → tablas `cartas` (user_id, id, datos jsonb) y `progreso` (user_id, datos jsonb). Esquema y reglas de seguridad (RLS) en `supabase/esquema.sql`.
+- **Al entrar**: `cargarDeLaNube()` sube a la cuenta las cartas que hubiera en el navegador y las quita de él (solo las ya subidas). Los sobres diarios ya reclamados en la nube no se duplican (`juntarMeta`).
+- **Al entrar/salir** la página se recarga; `initStore()` mira si hay sesión y elige el almacén.
+- Si la nube falla al cargar, se juega en el navegador (botón "Sin conexión") y se sube la próxima vez.
+- Proyecto Supabase: `lmmrcdyxepmllcaefira` (nombre "kurcar"). En el código solo van la URL y la clave **publicable** (`sb_publishable_...`), que son públicas a propósito. NUNCA la clave secret/service_role ni la contraseña de la base de datos.
+- Ajustes hechos en Supabase: "Confirm email" APAGADO (el email gratis de Supabase no llega a gente de fuera del equipo); Site URL = https://kurcar.github.io/kurcar/.
+- Librería: `@supabase/supabase-js@2.118.0` desde jsDelivr. Si no carga, el botón de cuenta se oculta y se juega sin cuenta.
+- `db` y `uid` (de claude.ai) siguen en `null`: matrículas e intercambios online pendientes.
+- Pruebas: en este Mac, Chrome headless sirve, pero para esperar a la nube usar tiempo real (la página envía el informe por POST a un servidor local), no `--virtual-time-budget`.
 
 Mientras no se sustituyan, esas partes no funcionarán al abrir la app en local.
 
