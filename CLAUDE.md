@@ -23,7 +23,7 @@ El artifact usaba el "runtime" de claude.ai, que FUERA de claude.ai no existe. H
 | `user.id()` | Identificar al jugador | — | ✅ HECHO: login con email y contraseña de Supabase (botón "Entrar" en la cabecera) |
 | `db.collection("data/users/...")` | Guardar colección de cada jugador | — | ✅ HECHO: `Almacen` = navegador sin cuenta, Supabase con cuenta (ver abajo) |
 | `db.collection("matriculas")` | Registro de matrículas ya fotografiadas | buscar `registry()` | Supabase (pendiente) |
-| `db.collection("intercambios")` | Cambios de cartas repetidas entre jugadores | buscar `mkStart` | Supabase (pendiente, siguiente gran paso) |
+| `db.collection("intercambios")` | Cambios de cartas repetidas entre jugadores | — | ✅ HECHO: mercadillo con Supabase (ver abajo) |
 | `sample.json(...)` | IA: reverso de carta, tasación por foto, motor de juego, tapar matrícula | líneas ~1627, 1685, 1854, 3664 | API de Claude llamada desde un servidor (nunca poner la API key en el navegador) |
 
 ## Guardado de la colección (`Almacen`) y Supabase
@@ -36,7 +36,17 @@ Todo el guardado de cartas y progreso pasa por la variable `Almacen` en `index.h
 - Proyecto Supabase: `lmmrcdyxepmllcaefira` (nombre "kurcar"). En el código solo van la URL y la clave **publicable** (`sb_publishable_...`), que son públicas a propósito. NUNCA la clave secret/service_role ni la contraseña de la base de datos.
 - Ajustes hechos en Supabase: "Confirm email" APAGADO (el email gratis de Supabase no llega a gente de fuera del equipo); Site URL = https://kurcar.github.io/kurcar/.
 - Librería: `@supabase/supabase-js@2.118.0` desde jsDelivr. Si no carga, el botón de cuenta se oculta y se juega sin cuenta.
-- `db` y `uid` (de claude.ai) siguen en `null`: matrículas e intercambios online pendientes.
+- `uid` = id del jugador en Supabase cuando ha entrado. `db` (de claude.ai) sigue en `null`: el registro de matrículas está pendiente.
+
+## Mercadillo de cromos (intercambios)
+- SQL en `supabase/intercambios.sql` (se puede re-ejecutar sin error). Tablas `perfiles` (apodo único, visible para jugadores con cuenta) y `ofertas`.
+- Las operaciones las hace la base de datos (funciones `security definer`): `kurcar_publicar`, `kurcar_aceptar`, `kurcar_retirar`. La interna `kurcar_nueva_carta` no la puede llamar nadie desde fuera.
+- Al aceptar, Supabase mueve las dos cartas de una vez: el autor recibe la suya aunque no esté conectado. Al abrir Kurcar, `mkAvisos()` le enseña "¡X ha aceptado tu oferta!".
+- Solo se cambian repetidas de sobre (`tradables()` en el cliente; el servidor comprueba que sea tuya, de sobre y no cazada). Máximo 5 ofertas abiertas.
+- Las cartas que llegan por cambio llevan `cambio:true` y un id nuevo (`x...`).
+- Se necesita cuenta y apodo. El email nunca se muestra; solo el apodo.
+- Probado con las cuentas `prueba-kurcar@example.com` / `prueba2-kurcar@example.com` (contraseña de prueba en los scripts del scratchpad, no en el repo).
+- Límite conocido: el juego confía en el cliente para los sobres; un tramposo puede inflar SU colección, pero no tocar la de otros.
 - Pruebas: en este Mac, Chrome headless sirve, pero para esperar a la nube usar tiempo real (la página envía el informe por POST a un servidor local), no `--virtual-time-budget`.
 
 Mientras no se sustituyan, esas partes no funcionarán al abrir la app en local.

@@ -1126,6 +1126,9 @@ b.ok{color:var(--go)}b.mid{color:#d08a10}b.bad{color:var(--stop)}
 .mk-pick{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 .mk-wl{display:grid;gap:4px;margin-top:10px;font-family:var(--f-display);font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:.75rem}
 .mk-wl select{font-size:.9rem;padding:8px;letter-spacing:0;text-transform:none}
+.mk-wl input{font:inherit;font-family:var(--f-body);font-weight:400;font-size:16px;padding:10px 12px;letter-spacing:0;text-transform:none;border:1px solid var(--line);border-radius:6px;background:var(--tile);color:var(--fg);width:100%}
+.mk-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.mk-bar .label{margin:0}
 .mk-msg{margin:0;font-weight:600;font-size:.85rem;min-height:0}.mk-msg:empty{display:none}.mk-msg.bad{color:var(--stop)}.mk-msg.ok{color:var(--go)}
 .m-code:empty{display:none}
 
@@ -1348,8 +1351,9 @@ body.mom-open{overflow:hidden}
     </div>
     <div id="cuenta-dentro" hidden>
       <p class="cd-txt">Has entrado como <b id="cuenta-quien"></b>. Tu colección se guarda en la nube.</p>
+      <label class="cd-l">Tu apodo en el mercadillo<input type="text" id="cuenta-apodo" maxlength="20" autocomplete="nickname" placeholder="Por ejemplo: ElDelSeat"></label>
       <p class="cd-msg" id="cuenta-msg2" role="alert" hidden></p>
-      <div class="cd-row"><button type="button" class="btn ghost" id="cuenta-salir">Salir</button></div>
+      <div class="cd-row"><button type="button" class="btn" id="cuenta-apodo-ok">Guardar apodo</button><button type="button" class="btn ghost" id="cuenta-salir">Salir</button></div>
     </div>
   </form>
 </dialog>
@@ -1800,7 +1804,7 @@ const MODO_CARRERAS=false;
 
 /* ---------- estado de la partida en memoria ---------- */
 let mine=[], meta={claimed:{},packs:[]}, db=null, uid=null;const openedPacks=new Set();
-/* db y uid: los usaban las matrículas e intercambios online de claude.ai; quedan vacíos hasta montarlos con Supabase */
+/* uid: id del jugador en Supabase cuando ha entrado (lo usa el mercadillo). db: era la base de datos de claude.ai (matrículas); sigue en null */
 function metaCompleta(m){m=m||{};return {claimed:m.claimed||{},packs:(m.packs||[]).filter(p=>p&&!openedPacks.has(p.id)),cs:m.cs||{},piloto:m.piloto||{km:0},taller:m.taller||{},car:m.car||{d:"",n:0},kit:m.kit||0,kit2:m.kit2||0,horas:m.horas||0}}
 let avisadoFallo=false;
 function falloGuardar(e){console.error("Kurcar: no se pudo guardar",e);if(!avisadoFallo){avisadoFallo=true;try{setStatus(Almacen===AlmacenSupabase?"Ojo: no he podido guardar en la nube. Revisa tu conexión.":"Ojo: no he podido guardar tu colección en este navegador.","bad")}catch(_){}}}
@@ -1837,13 +1841,15 @@ async function initStore(){
   let r=null;
   if(sb){try{const {data}=await sb.auth.getSession();const u=data?.session?.user;if(u)cuenta={id:u.id,email:u.email}}catch(e){console.warn("Kurcar: no pude leer la sesión",e)}}
   if(cuenta){
-    try{r=await cargarDeLaNube();Almacen=AlmacenSupabase}
+    try{r=await cargarDeLaNube();Almacen=AlmacenSupabase;uid=cuenta.id}
     catch(e){console.error("Kurcar: no pude cargar de la nube",e);nubeCaida=true}}
   if(!r){
     try{r=await cargarDelNavegador()}catch(e){console.error("Kurcar: no se pudo cargar la colección",e);r={cartas:[],meta:null}}
     Almacen=AlmacenNavegador}
   mine=(r.cartas||[]).sort((a,b)=>(a.t||0)-(b.t||0));meta=metaCompleta(r.meta);
   pintarCuenta();render();
+  cargaTerminada=true;
+  if(uid){mkAvisos().then(()=>{if(!$("#mk").hidden)drawMk()})}else if(!$("#mk").hidden)drawMk();
   grantDaily();repriceCaught().then(()=>fixOldPlates()).catch(()=>{});
 }
 
@@ -3722,19 +3728,62 @@ function copiesOf(){const m={};mine.forEach(c=>{const k=kOf(c);m[k]=(m[k]||0)+1}
 function tradables(){const n=copiesOf(),left={...n};const out=[];
   mine.filter(c=>c.premio&&!c.h).forEach(c=>{const k=kOf(c);if(left[k]>1){left[k]--;out.push(c)}});return out}
 function snapCard(c){const o={};["marca","modelo","anio","pais","tipo","cv","cc","cilindros","velocidad","aceleracion","peso","consumo","rareza","mito","frase","precio","color"].forEach(k=>{if(c[k]!=null)o[k]=c[k]});return o}
-const mkCol=()=>db?db.collection("intercambios"):null;
-async function mkStart(){if(MK.unsub||!db||!uid)return;try{MK.users=await window.claude?.use?.("user")}catch(_){}
-  MK.unsub=mkCol().onSnapshot(snap=>{MK.offers=snap.docs.map(d=>({...JSON.parse(JSON.stringify(d.data())),_id:d.id})).filter(o=>o&&o.give&&o.by);mkSettle();renderMkBadge();if(!$("#mk").hidden)drawMk()},()=>{})}
-/* el que ofreció recibe su parte cuando alguien acepta */
-async function mkSettle(){for(const o of MK.offers){if(o.by!==uid||o.st!=="aceptada"||!o.got||MK.done.has(o._id))continue;MK.done.add(o._id);
-  try{await gainCards([o.got]);await mkCol().doc(o._id).update({st:"cerrada",tc:Date.now()})}catch(_){MK.done.delete(o._id)}}}
+/* ---- mercadillo con Supabase: las operaciones las hace la base de datos (supabase/intercambios.sql) ---- */
+MK.nombres={};MK.apodo=null;MK.cargado=false;MK.msg=null;
+const mkActivo=()=>!!(sb&&cuenta&&uid&&Almacen===AlmacenSupabase);
+const mkDeFila=f=>({_id:f.id,by:f.autor,give:f.da||{},want:f.quiere||"",st:f.estado,t:Date.parse(f.creada)||0,got:f.recibe,taker:f.comprador,tc:f.cerrada?Date.parse(f.cerrada):0,visto:f.visto});
+async function mkCargar(){if(!mkActivo())return;
+  const {data,error}=await sb.from("ofertas").select("*").order("creada",{ascending:false}).limit(300);
+  if(error)throw error;
+  MK.offers=data.map(mkDeFila).filter(o=>o.give&&o.by);
+  const ids=[...new Set([uid,...MK.offers.map(o=>o.by),...MK.offers.map(o=>o.taker).filter(Boolean)])];
+  const {data:ps,error:e2}=await sb.from("perfiles").select("user_id,apodo").in("user_id",ids);
+  if(e2)throw e2;
+  MK.nombres={};(ps||[]).forEach(p=>MK.nombres[p.user_id]=p.apodo);MK.apodo=MK.nombres[uid]||null;MK.cargado=true;MK.error=false;renderMkBadge()}
+async function mkStart(){try{await mkCargar()}catch(e){console.warn("Kurcar: mercadillo",e);MK.error=true}if(!$("#mk").hidden)drawMk()}
+/* al abrir Kurcar: si alguien aceptó tus ofertas mientras no estabas, te lo enseña (la carta ya está en tu garaje) */
+async function mkAvisos(){try{await mkCargar();
+  const nuevos=MK.offers.filter(o=>o.by===uid&&o.st==="cerrada"&&!o.visto);if(!nuevos.length)return;
+  const {error}=await sb.from("ofertas").update({visto:true}).in("id",nuevos.map(o=>o._id));if(error)throw error;
+  nuevos.forEach(o=>o.visto=true);
+  const o=nuevos[0],g=o.got||{};
+  const carta=mine.filter(c=>c.cambio&&c.marca===g.marca&&c.modelo===g.modelo).sort((x,y)=>(y.t||0)-(x.t||0))[0];
+  const quien=MK.nombres[o.taker]||"Otro jugador";
+  const kicker=nuevos.length===1?`¡${quien} ha aceptado tu oferta!`:`¡Han aceptado ${nuevos.length} ofertas tuyas!`;
+  if(carta)setTimeout(()=>{try{showReveal(carta,kicker)}catch(_){}},600)}
+  catch(e){console.warn("Kurcar: avisos del mercadillo",e)}}
+async function guardarApodo(a){a=(a||"").trim();
+  if(a.length<2||a.length>20)return "El apodo tiene que tener entre 2 y 20 caracteres.";
+  const {error}=await sb.from("perfiles").upsert({user_id:uid,apodo:a,actualizado:new Date().toISOString()});
+  if(error)return /duplicate|unique|23505|409/i.test((error.message||"")+(error.code||""))?"Ese apodo ya lo usa otro jugador. Prueba con otro.":"No se ha podido guardar el apodo. Prueba otra vez.";
+  MK.apodo=a;MK.nombres[uid]=a;return null}
+function mkError(e){const t=(e&&(e.message||e.code))||String(e||"");
+  if(/ocupada/.test(t))return "Se te han adelantado: esa oferta ya no está disponible.";
+  if(/es_tuya/.test(t)&&!/no_es_tuya/.test(t))return "No puedes aceptar tu propia oferta.";
+  if(/no_es_tuya/.test(t))return "Ese cromo ya no está en tu garaje.";
+  if(/no_cambiable/.test(t))return "Ese cromo no se puede cambiar: solo los repetidos de sobre.";
+  if(/no_es_la_buscada/.test(t))return "Esa oferta busca otro coche.";
+  if(/maximo/.test(t))return `Máximo ${MK_MAX} ofertas a la vez.`;
+  if(/sin_apodo/.test(t))return "Primero elige un apodo.";
+  if(/fetch|network|failed/i.test(t))return "No hay conexión con la nube. Revisa tu internet.";
+  return "No se ha podido hacer. Prueba otra vez."}
 function renderMkBadge(){const b=$("#mk-open");if(!b)return;const t=tradables().length,open=MK.offers.filter(o=>o.st==="abierta"&&o.by!==uid).length;
   b.querySelector("b").textContent=`${t} repetido${t===1?"":"s"}${open?` · ${open} oferta${open===1?"":"s"}`:""}`}
-async function names(ids){const out={};if(!MK.users||!ids.length)return out;try{const ps=await MK.users.profiles(ids);ids.forEach(id=>out[id]=ps[id]?.name||"")}catch(_){}return out}
-function openMk(){$("#mk").hidden=false;document.body.style.overflow="hidden";mkStart();drawMk()}
+async function names(ids){const out={};ids.forEach(id=>out[id]=MK.nombres[id]||"");return out}
+function openMk(){$("#mk").hidden=false;document.body.style.overflow="hidden";drawMk();mkStart()}
 function closeMk(){$("#mk").hidden=true;if($("#sheet").hidden)document.body.style.overflow=""}
 async function drawMk(){const box=$("#mk-body");if(!box)return;
-  if(!db||!uid){box.innerHTML=`<div class="empty">El mercadillo necesita abrir Kurcar con tu cuenta de Claude.</div>`;return}
+  if(!sb){box.innerHTML=`<div class="empty">El mercadillo no está disponible ahora mismo.</div>`;return}
+  if(!cuenta){box.innerHTML=`<div class="empty">Para cambiar cromos con otros jugadores tienes que entrar en tu cuenta.<div class="row" style="margin-top:12px;justify-content:center"><button class="btn small" id="mk-login">Entrar</button></div></div>`;
+    $("#mk-login").onclick=()=>{closeMk();$("#cuenta-btn").click()};return}
+  if(!mkActivo()&&!nubeCaida&&!cargaTerminada){box.innerHTML=`<div class="empty">Cargando tu colección…</div>`;return}
+  if(!mkActivo()||MK.error){box.innerHTML=`<div class="empty">Ahora mismo no puedo conectar con el mercadillo. Revisa tu internet.<div class="row" style="margin-top:12px;justify-content:center"><button class="btn small" id="mk-retry">Reintentar</button></div></div>`;
+    const rt=$("#mk-retry");if(rt)rt.onclick=()=>{MK.error=false;box.innerHTML=`<div class="empty">Cargando ofertas…</div>`;mkStart()};return}
+  if(!MK.cargado){box.innerHTML=`<div class="empty">Cargando ofertas…</div>`;return}
+  if(!MK.apodo){box.innerHTML=`<div class="mk-apodo"><p class="tag" style="text-align:left;margin:0 0 10px">Antes de nada, elige un <b>apodo</b>. Es el nombre que verán los demás en el mercadillo. Tu email no se enseña nunca.</p>
+      <label class="mk-wl" for="mk-apodo">Tu apodo<input id="mk-apodo" maxlength="20" autocomplete="nickname" placeholder="Por ejemplo: ElDelSeat"></label>
+      <div class="row" style="margin-top:12px"><button class="btn" id="mk-apodo-ok">Guardar apodo</button></div><p class="mk-msg" id="mk-msg" aria-live="polite"></p></div>`;
+    $("#mk-apodo-ok").onclick=async()=>{const bt=$("#mk-apodo-ok");bt.disabled=true;const err=await guardarApodo($("#mk-apodo").value);if(err){mkMsg(err,true);bt.disabled=false;return}drawMk()};return}
   const tr=tradables(),others=MK.offers.filter(o=>o.st==="abierta"&&o.by!==uid).sort((a,b)=>b.t-a.t),mineO=MK.offers.filter(o=>o.by===uid&&(o.st!=="cerrada"||Date.now()-(o.tc||0)<3*864e5)).sort((a,b)=>b.t-a.t);
   const have=copiesOf(),trK=new Set(tr.map(kOf));
   const nm=await names([...new Set([...others.map(o=>o.by),...mineO.map(o=>o.taker).filter(Boolean)])]);
@@ -3759,7 +3808,9 @@ async function drawMk(){const box=$("#mk-body");if(!box)return;
       <div class="row" style="margin-top:12px"><button class="btn" id="mk-pub" ${MK.sel&&open<MK_MAX?"":"disabled"}>${open>=MK_MAX?`Máximo ${MK_MAX} ofertas a la vez`:"Publicar oferta"}</button></div>`
       :`<div class="empty">No tienes repetidos de sobre. Cuando te toque un coche que ya tienes, podrás cambiarlo aquí.</div>`;
     MK._tr=tr}
-  box.innerHTML=`${tabs}<p class="mk-msg" id="mk-msg" aria-live="polite"></p>${body}`;
+  const ms=MK.msg;MK.msg=null;
+  box.innerHTML=`${tabs}<div class="mk-bar"><span class="label">Hola, ${esc(MK.apodo)}</span><button class="btn ghost small" id="mk-ref">Actualizar</button></div><p class="${ms?"mk-msg"+(ms.bad?" bad":" ok"):"mk-msg"}" id="mk-msg" aria-live="polite">${ms?esc(ms.t):""}</p>${body}`;
+  const rf=$("#mk-ref");if(rf)rf.onclick=async()=>{rf.disabled=true;rf.textContent="Actualizando…";await mkStart()};
   box.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{MK.tab=b.dataset.tab;drawMk()});
   box.querySelectorAll("[data-acc]").forEach(b=>b.onclick=()=>pickForAccept(MK.offers.find(o=>o._id===b.dataset.acc)));
   box.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>retire(MK.offers.find(o=>o._id===b.dataset.del)));
@@ -3768,24 +3819,25 @@ async function drawMk(){const box=$("#mk-body");if(!box)return;
   const w=$("#mk-want");if(w)w.onchange=e=>{MK.want=e.target.value};
   const pb=$("#mk-pub");if(pb)pb.onclick=publishOffer;
 }
-const mkMsg=(t,bad)=>{const m=$("#mk-msg");if(m){m.textContent=t;m.className="mk-msg"+(bad?" bad":" ok")}};
+const mkMsg=(t,bad)=>{MK.msg={t,bad};const m=$("#mk-msg");if(m){m.textContent=t;m.className="mk-msg"+(bad?" bad":" ok")}};
 async function publishOffer(){if(MK.busy)return;const c=mine.find(x=>x.id===MK.sel);if(!c||!tradables().some(x=>x.id===c.id))return mkMsg("Ese cromo ya no está entre tus repetidos.",true);
-  MK.busy=true;try{await mkCol().add({by:uid,give:snapCard(c),want:MK.want||"",st:"abierta",t:Date.now()});await loseCards([c]);MK.sel=null;MK.tab="mias";mkMsg("Oferta publicada.")}
-  catch(e){mkMsg(e?.code==="permission_denied"||e?.code==="not_granted"?"No tienes permiso para publicar: pide al dueño de Kurcar que te comparta la app con permiso para participar.":"No se ha podido publicar. Prueba otra vez.",true)}MK.busy=false;drawMk()}
-async function retire(o){if(MK.busy||!o||o.st!=="abierta")return;MK.busy=true;const ref=mkCol().doc(o._id);
-  try{const l=await ref.acquire({ttlMs:8000});if(!l.acquired)throw {code:"busy"};const s=await ref.get();if(!s.exists||s.data().st!=="abierta")throw {code:"taken"};await ref.delete();await gainCards([o.give]);mkMsg("Oferta retirada: el cromo vuelve a tu garaje.")}
-  catch(e){mkMsg(e?.code==="taken"?"Alguien acaba de aceptar esa oferta: en un momento te llega su cromo.":"No se ha podido retirar. Prueba otra vez.",true)}MK.busy=false;drawMk()}
+  MK.busy=true;try{const {error}=await sb.rpc("kurcar_publicar",{carta_id:c.id,quiere:MK.want||""});if(error)throw error;
+    mine=mine.filter(x=>x.id!==c.id);render();MK.sel=null;MK.tab="mias";await mkCargar().catch(()=>{});mkMsg("Oferta publicada. El cromo queda en el mostrador hasta que alguien lo cambie o lo retires.")}
+  catch(e){console.warn("Kurcar: publicar",e);mkMsg(mkError(e),true)}MK.busy=false;drawMk()}
+async function retire(o){if(MK.busy||!o||o.st!=="abierta")return;MK.busy=true;
+  try{const {data,error}=await sb.rpc("kurcar_retirar",{oferta_id:o._id});if(error)throw error;
+    mine.push(data);render();await mkCargar().catch(()=>{});mkMsg("Oferta retirada: el cromo vuelve a tu garaje.")}
+  catch(e){console.warn("Kurcar: retirar",e);await mkCargar().catch(()=>{});mkMsg(/ocupada/.test(e?.message||"")?"Alguien acaba de aceptar esa oferta: su cromo ya está en tu garaje.":mkError(e),true)}MK.busy=false;drawMk()}
 function pickForAccept(o){if(!o)return;const tr=tradables().filter(c=>!o.want||kOf(c)===o.want);const box=$("#mk-body");
   box.innerHTML=`<div class="rc-top"><button class="btn ghost small" id="mk-back">‹ Ofertas</button><span class="label">Cambiar</span></div>
   <p class="tag" style="text-align:left;margin:0 0 8px">Te llevas el <b>${esc(shortName(o.give))}</b>. Elige qué repetido das a cambio.</p>
   <div class="minis mk-pick">${tr.map((c,i)=>miniHTML(c,"",`data-i="${i}"`)).join("")}</div><p class="mk-msg" id="mk-msg"></p>`;
   $("#mk-back").onclick=drawMk;box.querySelector(".mk-pick").onclick=e=>{const b=e.target.closest(".mini");if(b)accept(o,tr[+b.dataset.i])}}
-async function accept(o,c){if(MK.busy)return;MK.busy=true;const ref=mkCol().doc(o._id);
-  try{const l=await ref.acquire({ttlMs:8000});if(!l.acquired)throw {code:"busy"};const s=await ref.get();const d=s.exists?s.data():null;if(!d||d.st!=="abierta")throw {code:"taken"};
-    if(!mine.some(x=>x.id===c.id))throw {code:"gone"};
-    await ref.update({st:"aceptada",taker:uid,got:snapCard(c),ta:Date.now()});await loseCards([c]);await gainCards([d.give]);
-    const got=mine[mine.length-1];MK.busy=false;closeMk();if(got)showReveal(got,"¡Cambio hecho!");return}
-  catch(e){MK.busy=false;drawMk();mkMsg(e?.code==="taken"||e?.code==="busy"?"Se te han adelantado: esa oferta ya no está disponible.":e?.code==="permission_denied"?"No tienes permiso para cambiar: pide al dueño de Kurcar que te comparta la app con permiso para participar.":"No se ha podido hacer el cambio. Prueba otra vez.",true)}}
+async function accept(o,c){if(MK.busy)return;MK.busy=true;
+  try{if(!mine.some(x=>x.id===c.id))throw {message:"no_es_tuya"};
+    const {data,error}=await sb.rpc("kurcar_aceptar",{oferta_id:o._id,carta_id:c.id});if(error)throw error;
+    mine=mine.filter(x=>x.id!==c.id);mine.push(data);render();MK.busy=false;closeMk();mkCargar().catch(()=>{});showReveal(data,"¡Cambio hecho!");return}
+  catch(e){console.warn("Kurcar: aceptar",e);MK.busy=false;await mkCargar().catch(()=>{});mkMsg(mkError(e),true);drawMk()}}
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#mk").hidden)closeMk()});
 (()=>{const o=$("#mk-open");if(o)o.onclick=openMk;const c=$("#mk-close");if(c)c.onclick=closeMk;const m=$("#mk");if(m)m.onclick=e=>{if(e.target.id==="mk")closeMk()}})();
 
@@ -3885,7 +3937,7 @@ async function confirmPick(){const c=PICK.cards[PICK.sel],pack=PICK.pack;if(!c||
 
 
 /* ---------- ventana de cuenta (entrar / crear cuenta / salir) ---------- */
-let nubeCaida=false;
+let nubeCaida=false,cargaTerminada=false;
 function pintarCuenta(){const b=$("#cuenta-btn"),t=$("#cuenta-txt");if(!b)return;
   b.hidden=!sb;b.classList.toggle("dentro",!!cuenta&&!nubeCaida);b.classList.toggle("aviso",!!cuenta&&nubeCaida);
   t.textContent=cuenta?(nubeCaida?"Sin conexión":cuenta.email.split("@")[0]):"Entrar";
@@ -3916,11 +3968,14 @@ async function accionCuenta(crear){
     location.reload(); /* al recargar, initStore ve la sesión y trae la colección de la nube */
   }catch(e){console.warn("Kurcar: cuenta",e);avisoCuenta(errorEnEspanol(e));bs.forEach(b=>b.disabled=false)}}
 (function montarCuenta(){const dlg=$("#cuenta-dlg");if(!dlg)return;
-  $("#cuenta-btn").onclick=()=>{avisoCuenta("");pintarCuenta();dlg.showModal?dlg.showModal():dlg.setAttribute("open","")};
+  $("#cuenta-btn").onclick=()=>{avisoCuenta("");pintarCuenta();$("#cuenta-apodo").value=MK.apodo||"";$("#cuenta-apodo-ok").hidden=!uid;$("#cuenta-apodo").closest("label").hidden=!uid;dlg.showModal?dlg.showModal():dlg.setAttribute("open","")};
   $("#cuenta-cerrar").onclick=()=>dlg.close();
   dlg.addEventListener("click",e=>{if(e.target===dlg)dlg.close()}); /* tocar fuera cierra */
   $("#cuenta-form").addEventListener("submit",e=>{e.preventDefault();if(!cuenta)accionCuenta(false)});
   $("#cuenta-crear").onclick=()=>accionCuenta(true);
+  $("#cuenta-apodo-ok").onclick=async()=>{const b=$("#cuenta-apodo-ok"),m=$("#cuenta-msg2");b.disabled=true;
+    const err=uid?await guardarApodo($("#cuenta-apodo").value):"Ahora mismo no hay conexión con la nube.";
+    m.hidden=false;m.textContent=err||"Apodo guardado.";m.classList.toggle("ok",!err);b.disabled=false;renderMkBadge()};
   $("#cuenta-salir").onclick=async()=>{$("#cuenta-salir").disabled=true;try{await sb.auth.signOut()}catch(_){}location.reload()};
   pintarCuenta()})();
 
