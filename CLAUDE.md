@@ -33,6 +33,7 @@ Mientras no se sustituyan, esas partes no funcionarán al abrir la app en local.
 - Diseño estilo garaje/taller; cada carta con estilo según la época del coche.
 - Circuitos con trazados reales.
 - Modo carreras: circuito, resistencia, rally, off-road; km, experiencia de piloto, clima, paradas en boxes, cartas de piezas/mantenimiento y más adelante modificaciones.
+  - ⏸️ De momento OCULTO por deseo de Pedro (10-11-2026). Interruptor `const MODO_CARRERAS=false` en `index.html`: oculta la pestaña, las horas de taller, las piezas en sobres, los km y el estado de las cartas. El código sigue ahí; poner `true` para recuperarlo.
 - Intercambiar solo cartas repetidas con otras personas.
 - Convertirla en app móvil descargable (iPhone/Android).
 

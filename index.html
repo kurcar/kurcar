@@ -1314,7 +1314,7 @@ body.mom-open{overflow:hidden}
   <button role="tab" id="t-garaje" aria-selected="true" data-tab="garaje"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 4l9 6.5V20H3z"/><path d="M7 20v-6h10v6"/><path d="M7 17h10"/></svg><span>Garaje</span></button>
   <button role="tab" id="t-retos" aria-selected="false" data-tab="retos"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3"/><path d="M12 13v4M8 20h8M10 17h4v3h-4z"/></svg><span>Retos</span><i class="badge" id="badge" hidden></i></button>
   <button role="tab" id="t-cazar" aria-selected="false" data-tab="cazar" class="hot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg><span>Cazar</span></button>
-  <button role="tab" id="t-carreras" aria-selected="false" data-tab="carreras"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h13l-2 4 2 4H5"/><path d="M9 4v8M13 4v8M5 8h13"/></svg><span>Carreras</span></button>
+  <button role="tab" id="t-carreras" aria-selected="false" data-tab="carreras" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h13l-2 4 2 4H5"/><path d="M9 4v8M13 4v8M5 8h13"/></svg><span>Carreras</span></button>
   <button role="tab" id="t-batalla" aria-selected="false" data-tab="batalla"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="9" height="13" rx="1.5" transform="rotate(-8 7.5 11.5)"/><rect x="12" y="5" width="9" height="13" rx="1.5" transform="rotate(8 16.5 11.5)"/></svg><span>Batalla</span></button>
 </nav>
 
@@ -1645,7 +1645,7 @@ function cardHTML(c,o={}){
     <div class="pic">${picOf(c)?`<img src="${picOf(c)}" alt="${esc(c.marca+" "+c.modelo)}">`:silhouette(c.color,c.tipo,c.marca+c.modelo)}</div>
     <p class="blurb">${esc(c.frase)}</p>
     <div class="specs">${specs}</div>
-    <div class="c-odo"><span>Cuentakilómetros</span><b>${typeof odoHTML==="function"?odoHTML(kmCard(c)):"000000"}</b><em>km</em></div>
+    ${MODO_CARRERAS?`<div class="c-odo"><span>Cuentakilómetros</span><b>${typeof odoHTML==="function"?odoHTML(kmCard(c)):"000000"}</b><em>km</em></div>`:""}
     ${c.premio?`<div class="where">Carta de premio · ${dayLabel(c.t)}</div>`:c.t?`<div class="where">Cazado${c.zona?" en "+esc(c.zona):""} · ${dayLabel(c.t)}</div>`:""}
   </article>`;
 }
@@ -1716,6 +1716,12 @@ const AlmacenNavegador=(()=>{
 
 const Almacen=AlmacenNavegador; /* <- en el futuro: const Almacen=AlmacenSupabase; */
 
+/* ---------- interruptor del modo carreras ----------
+   false = oculto (pestaña, horas de taller, piezas en sobres, estado de las cartas).
+   El código sigue ahí: poner true para recuperarlo. */
+const MODO_CARRERAS=false;
+{const t=document.getElementById("t-carreras");if(t)t.hidden=!MODO_CARRERAS}
+
 /* ---------- estado de la partida en memoria ---------- */
 let mine=[], meta={claimed:{},packs:[]}, db=null, uid=null;const openedPacks=new Set();
 /* db y uid: los usaban las matrículas e intercambios online de claude.ai; quedan vacíos hasta tener Supabase */
@@ -1763,7 +1769,7 @@ async function saveMeta(){
 /* ---------- garaje ---------- */
 function render(){
   renderMinis();
-  $("#count").innerHTML=`<button class="hp hh" id="hh" title="Horas de taller" aria-label="${meta.horas||0} horas de taller"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4a4 4 0 0 0-5 5L4 14l2 2 5-5a4 4 0 0 0 5-5l-2.5 2.5-2-2z"/></svg>${meta.horas||0} h</button><span class="hp">${caught().length} ${caught().length===1?"cazada":"cazadas"}</span>`;
+  $("#count").innerHTML=`${MODO_CARRERAS?`<button class="hp hh" id="hh" title="Horas de taller" aria-label="${meta.horas||0} horas de taller"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4a4 4 0 0 0-5 5L4 14l2 2 5-5a4 4 0 0 0 5-5l-2.5 2.5-2-2z"/></svg>${meta.horas||0} h</button>`:""}<span class="hp">${caught().length} ${caught().length===1?"cazada":"cazadas"}</span>`;
   {const hh=$("#hh");if(hh)hh.onclick=()=>{const t=$("#t-carreras");if(t)t.click();setTimeout(()=>{if(typeof RC!=="undefined"&&RC.view!=="race"){RC.view="hub";drawHub();const h=[...document.querySelectorAll("#carreras h2")].find(x=>x.textContent.includes("Tus coches"));if(h)h.scrollIntoView({behavior:"smooth"})}},60)}}
   if(typeof renderRetos==="function"){renderRetos();renderToday();const n=dailyTasks().filter(x=>x.done&&!x.claimed).length+medalList().filter(x=>x.done&&!x.claimed).length+(meta.packs||[]).length;const bd=$("#badge");bd.hidden=!n;bd.textContent=n}
   if(typeof renderCarreras==="function")renderCarreras();try{renderMkBadge()}catch(_){}
@@ -2282,7 +2288,7 @@ async function openPack(pack){
   const r=rollPack(pack.kind,pack.tier);
   let n=mine.filter(c=>c.premio).length;const t=Date.now();
   const cards=r.cards.map((b,i)=>({...b,id:"p"+(t+i).toString(36)+i,t:t+i,premio:true,code:"P"+(++n)}));
-  const pieces=typeof grantPiece==="function"?grantPiece(pack.kind==="mejorado"?2:1):[];
+  const pieces=MODO_CARRERAS&&typeof grantPiece==="function"?grantPiece(pack.kind==="mejorado"?2:1):[];
   PK={tier:r.tier,cards,i:-1,kind:pack.kind,pieces};
   showPackUI();
   try{await saveMeta()}catch(_){}
@@ -2438,7 +2444,7 @@ function allCards(){
 }
 function rowHTML(c,i){
   const nCop=(()=>{const k=(c.marca+" "+c.modelo).trim();return mine.filter(x=>(x.marca+" "+x.modelo).trim()===k).length+STARTER.filter(x=>(x.marca+" "+x.modelo).trim()===k).length})();
-  const sub=[c.anio,RAR[c.rareza]||"Común",(typeof fmtKmS==="function"?fmtKmS(kmCard(c)):"0 km"),nCop>1?`Repetida ×${nCop}`:"",c.zona?("Cazado en "+c.zona):c.premio?"Premio":c._src==="regalo"?"Regalo":""].filter(Boolean).join(" · ");
+  const sub=[c.anio,RAR[c.rareza]||"Común",(MODO_CARRERAS&&typeof fmtKmS==="function"?fmtKmS(kmCard(c)):""),nCop>1?`Repetida ×${nCop}`:"",c.zona?("Cazado en "+c.zona):c.premio?"Premio":c._src==="regalo"?"Regalo":""].filter(Boolean).join(" · ");
   return `<button class="rc r-${esc(c.rareza)}" data-i="${i}" aria-label="${esc(c.marca+" "+c.modelo)}, media ${media(c)}">
     <span class="rc-pic">${picOf(c)?`<img src="${picOf(c)}" alt="" loading="lazy">`:silhouette(c.color,c.tipo,c.marca+c.modelo)}</span>
     <span class="rc-main"><span class="rc-brand">${plate(c.marca,c.pais)}</span><span class="rc-model">${esc(c.modelo)}</span><span class="rc-sub">${esc(sub)}</span></span>
@@ -2486,7 +2492,7 @@ function analysis(c){
   if(c.zona)facts.push(`Cazado en ${esc(c.zona)}`);if(c.t&&!c.premio)facts.push(dayLabel(c.t));if(c.premio)facts.push("Carta de premio");if(c._src==="regalo")facts.push("Baraja de regalo");
   if(c.anio)facts.push(`Año ${c.anio}`);if(c.pais)facts.push(PAISES[c.pais]||c.pais);
   if(c.cv&&c.peso)facts.push(`${(c.peso/c.cv).toFixed(1).replace(".",",")} kg por CV`);
-  if(typeof csOf==="function"&&c.id){const st=csOf(c);facts.push(`Estado ${st.est} %`);facts.push(fiabTxt(fiabOf(c)));if(st.km)facts.push(`${fmtKm(st.km)} de carreras`)}
+  if(MODO_CARRERAS&&typeof csOf==="function"&&c.id){const st=csOf(c);facts.push(`Estado ${st.est} %`);facts.push(fiabTxt(fiabOf(c)));if(st.km)facts.push(`${fmtKm(st.km)} de carreras`)}
   return `<div class="anal-head"><div class="ovr-box ${esc(c.rareza)}"><span class="ovr">${m}</span><span>Media</span></div>
     <p><b class="nm">${esc(c.marca)} ${esc(c.modelo)}</b>${RAR[c.rareza]||"Común"} · Su mejor baza en batalla: <b>${best.s.l}</b>, mejor que el ${Math.round(best.p*100)} % de la baraja.</p></div>
     <div class="bars">${bars}</div>
@@ -2553,7 +2559,7 @@ const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.random(
 const sv=(c,k)=>+c[k]||0;
 function miniHTML(c,extra="",attrs=""){return `<button class="mini ${esc(c.rareza)} ${extra}" ${attrs} aria-label="${esc(c.marca+" "+c.modelo)}">
   <span class="m-top"><span class="m-ovr${mitoOf(c)===3?" ico":""}">${media(c)}<small>${mitoOf(c)===3?"ICONO":"MEDIA"}</small></span><span class="m-code"></span></span>
-  <span class="m-pic">${picOf(c)?`<img src="${picOf(c)}" alt="" loading="lazy">`:silhouette(c.color,c.tipo,c.marca+c.modelo)}<span class="m-odo">${typeof fmtKmS==="function"?fmtKmS(kmCard(c)):"0 km"}</span></span>
+  <span class="m-pic">${picOf(c)?`<img src="${picOf(c)}" alt="" loading="lazy">`:silhouette(c.color,c.tipo,c.marca+c.modelo)}${MODO_CARRERAS&&typeof fmtKmS==="function"?`<span class="m-odo">${fmtKmS(kmCard(c))}</span>`:""}</span>
   <span class="m-name">${esc(c.marca)} ${esc(c.modelo)}</span>
   <span class="m-foot"><span>${fmt("cv",c.cv)} CV</span>${flagSVG(c.pais)}</span></button>`}
 /* probabilidad de que la carta gane el reto (s, dir) contra una carta cualquiera de la baraja */
@@ -2698,7 +2704,7 @@ function endBattle(){
     const wn=M.me>=2?"me":M.cpu>=2?"cpu":null;
     t+=" "+(!wn?"<b>Partida empatada.</b>":M.pvp?`<b>¡${esc(NM(wn))} gana la partida ${M[wn]}-${M[other(wn)]}!</b>`:wn==="me"?`<b>¡Has ganado la partida ${M.me}-${M.cpu}!</b>`:`<b>La máquina gana la partida ${M.cpu}-${M.me}.</b> A por la revancha.`);
     $("#next").textContent="Otra partida";$("#next").onclick=()=>startMatch(M.pvp);
-    if(wn==="me"&&!M.pvp&&typeof addHoras==="function"){addHoras(2);saveMeta().catch(()=>{});t+=` <span class="hrs-i">+2 h de taller</span>`}
+    if(wn==="me"&&!M.pvp&&MODO_CARRERAS&&typeof addHoras==="function"){addHoras(2);saveMeta().catch(()=>{});t+=` <span class="hrs-i">+2 h de taller</span>`}
     if(wn&&M.stake!=="normal"){$("#call").innerHTML=t;settleStakes(wn);return}
   }else{$("#next").textContent=`Ir a la batalla ${M.bat+1}`;$("#next").onclick=newBattle}
   $("#call").innerHTML=t;$("#next-row").hidden=false;
