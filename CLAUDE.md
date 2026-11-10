@@ -9,6 +9,12 @@ La app nació como un artifact de claude.ai (un solo `index.html` + carpeta `pho
 - `index.html` — toda la app (HTML + CSS + JS en un único archivo, ~450 KB).
 - `photos/` — fotos reales de coches (Wikimedia Commons), una por modelo.
 
+## Publicación
+- Repositorio público: https://github.com/kurcar/kurcar (cuenta de GitHub `kurcar`).
+- Web (GitHub Pages, rama `main`, raíz): https://kurcar.github.io/kurcar/ — se actualiza sola 1-2 min después de cada `git push`.
+- Los commits se firman con el email privado de GitHub (`...@users.noreply.github.com`), nunca con el Gmail de Pedro: todo lo que se sube es público.
+- La herramienta `gh` está en `~/.local/bin/gh` (el Homebrew del Mac está roto; no usarlo).
+
 ## IMPORTANTE: funciones que solo existían dentro de claude.ai
 El artifact usaba el "runtime" de claude.ai, que FUERA de claude.ai no existe. Hay que sustituirlo:
 
